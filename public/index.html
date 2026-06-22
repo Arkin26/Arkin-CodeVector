@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Product Browse</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        font-family: system-ui, sans-serif;
+        line-height: 1.5;
+      }
+
+      body {
+        margin: 0 auto;
+        max-width: 960px;
+        padding: 2rem 1rem 4rem;
+      }
+
+      header {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 1rem;
+        align-items: end;
+        margin-bottom: 2rem;
+      }
+
+      label {
+        display: grid;
+        gap: 0.25rem;
+        font-size: 0.9rem;
+      }
+
+      select,
+      button {
+        font: inherit;
+        padding: 0.5rem 0.75rem;
+      }
+
+      .grid {
+        display: grid;
+        gap: 1rem;
+        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      }
+
+      .card {
+        border: 1px solid #8884;
+        border-radius: 8px;
+        padding: 1rem;
+      }
+
+      .card h2 {
+        margin: 0 0 0.5rem;
+        font-size: 1rem;
+      }
+
+      .meta {
+        color: #666;
+        font-size: 0.85rem;
+      }
+
+      #status {
+        margin: 1rem 0;
+        min-height: 1.25rem;
+      }
+
+      .error {
+        color: #b00020;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Product Browse</h1>
+    <p>Browse ~200k products with stable snapshot pagination.</p>
+
+    <header>
+      <label>
+        Category
+        <select id="category">
+          <option value="">All categories</option>
+        </select>
+      </label>
+      <button id="refresh" type="button">New browse session</button>
+      <button id="loadMore" type="button" disabled>Load more</button>
+    </header>
+
+    <div id="status"></div>
+    <div id="products" class="grid"></div>
+
+    <script>
+      const categorySelect = document.getElementById("category");
+      const refreshButton = document.getElementById("refresh");
+      const loadMoreButton = document.getElementById("loadMore");
+      const productsEl = document.getElementById("products");
+      const statusEl = document.getElementById("status");
+
+      let snapshot = null;
+      let nextCursor = null;
+      let hasNext = false;
+
+      function setStatus(message, isError = false) {
+        statusEl.textContent = message;
+        statusEl.className = isError ? "error" : "";
+      }
+
+      function formatDate(value) {
+        return new Date(value).toLocaleString();
+      }
+
+      function renderProducts(products, append) {
+        if (!append) {
+          productsEl.innerHTML = "";
+        }
+
+        for (const product of products) {
+          const card = document.createElement("article");
+          card.className = "card";
+          card.innerHTML = `
+            <h2>${product.name}</h2>
+            <div class="meta">${product.category}</div>
+            <div>$${Number(product.price).toFixed(2)}</div>
+            <div class="meta">Updated ${formatDate(product.updated_at)}</div>
+          `;
+          productsEl.appendChild(card);
+        }
+      }
+
+      async function fetchJson(url) {
+        const response = await fetch(url);
+        const body = await response.json();
+        if (!response.ok) {
+          const error = new Error(body.message || "Request failed");
+          error.status = response.status;
+          error.body = body;
+          throw error;
+        }
+        return body;
+      }
+
+      async function loadCategories() {
+        const result = await fetchJson("/api/categories");
+        for (const category of result.data) {
+          const option = document.createElement("option");
+          option.value = category;
+          option.textContent = category;
+          categorySelect.appendChild(option);
+        }
+      }
+
+      async function loadProducts({ append = false } = {}) {
+        const params = new URLSearchParams({ limit: "20" });
+        const category = categorySelect.value;
+        if (category) {
+          params.set("category", category);
+        }
+        if (append && snapshot && nextCursor) {
+          params.set("snapshot", snapshot);
+          params.set("cursor", nextCursor);
+        }
+
+        setStatus(append ? "Loading more..." : "Loading...");
+        loadMoreButton.disabled = true;
+
+        try {
+          const result = await fetchJson(`/api/products?${params}`);
+          snapshot = result.page_info.snapshot;
+          nextCursor = result.page_info.next_cursor;
+          hasNext = result.page_info.has_next;
+          renderProducts(result.data, append);
+          setStatus(
+            hasNext
+              ? "Showing a snapshot-frozen page. Load more to continue."
+              : "End of listing for this browse session.",
+          );
+          loadMoreButton.disabled = !hasNext;
+        } catch (error) {
+          if (error.status === 410) {
+            snapshot = null;
+            nextCursor = null;
+            hasNext = false;
+            setStatus(`${error.message} Click "New browse session".`, true);
+          } else {
+            setStatus(error.message, true);
+          }
+        }
+      }
+
+      categorySelect.addEventListener("change", () => {
+        snapshot = null;
+        nextCursor = null;
+        loadProducts();
+      });
+
+      refreshButton.addEventListener("click", () => {
+        snapshot = null;
+        nextCursor = null;
+        loadProducts();
+      });
+
+      loadMoreButton.addEventListener("click", () => {
+        loadProducts({ append: true });
+      });
+
+      loadCategories()
+        .then(() => loadProducts())
+        .catch((error) => setStatus(error.message, true));
+    </script>
+  </body>
+</html>
