@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Guided Demo — Product Browse</title>
+    <style>
+      :root {
+        font-family: system-ui, sans-serif;
+        line-height: 1.5;
+        color-scheme: light dark;
+      }
+
+      body {
+        max-width: 720px;
+        margin: 0 auto;
+        padding: 2rem 1rem 4rem;
+      }
+
+      .step {
+        border: 1px solid #8884;
+        border-radius: 10px;
+        padding: 1rem;
+        margin-bottom: 1rem;
+      }
+
+      .step.done {
+        border-color: #15803d;
+      }
+
+      button {
+        font: inherit;
+        padding: 0.5rem 0.85rem;
+        border-radius: 8px;
+        cursor: pointer;
+      }
+
+      .proof {
+        background: #15803d18;
+        border: 1px solid #15803d;
+        border-radius: 10px;
+        padding: 1rem;
+        margin-top: 1rem;
+      }
+
+      .bad {
+        color: #b91c1c;
+      }
+
+      .good {
+        color: #15803d;
+      }
+
+      code {
+        background: #8882;
+        padding: 0.1rem 0.35rem;
+        border-radius: 4px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>30-second reviewer demo</h1>
+    <p>
+      This page walks through the assignment's hardest requirement: browsing stays correct
+      even when 50 products are added or updated mid-session.
+    </p>
+
+    <div class="step" id="step1">
+      <h2>Step 1 — Load page 1</h2>
+      <p>Creates a PostgreSQL snapshot and loads the first 20 products.</p>
+      <button id="btnStep1" type="button">Load page 1</button>
+      <div id="out1"></div>
+    </div>
+
+    <div class="step" id="step2">
+      <h2>Step 2 — Simulate 50 inserts</h2>
+      <p>Writes 50 new products with <code>updated_at = now()</code> to the live database.</p>
+      <button id="btnStep2" type="button" disabled>Simulate 50 inserts</button>
+      <div id="out2"></div>
+    </div>
+
+    <div class="step" id="step3">
+      <h2>Step 3 — Load page 2</h2>
+      <p>Continues the frozen snapshot session. No duplicates, no missed rows.</p>
+      <button id="btnStep3" type="button" disabled>Load page 2</button>
+      <div id="out3"></div>
+    </div>
+
+    <div id="proof" hidden class="proof">
+      <strong>Proof:</strong>
+      <span id="proofText"></span>
+    </div>
+
+    <p><a href="/">← Back to main browse UI</a></p>
+
+    <script>
+      let snapshot = null;
+      let nextCursor = null;
+      let page1Ids = [];
+
+      async function fetchJson(url, options) {
+        const response = await fetch(url, options);
+        const body = await response.json();
+        if (!response.ok) {
+          const error = new Error(body.message || "Request failed");
+          error.status = response.status;
+          throw error;
+        }
+        return body;
+      }
+
+      document.getElementById("btnStep1").addEventListener("click", async () => {
+        const result = await fetchJson("/api/products?limit=20");
+        snapshot = result.page_info.snapshot;
+        nextCursor = result.page_info.next_cursor;
+        page1Ids = result.data.map((p) => p.id);
+        document.getElementById("out1").textContent =
+          `Loaded ${result.data.length} products. Snapshot ${snapshot.slice(0, 12)}…`;
+        document.getElementById("step1").classList.add("done");
+        document.getElementById("btnStep2").disabled = false;
+      });
+
+      document.getElementById("btnStep2").addEventListener("click", async () => {
+        try {
+          const result = await fetchJson("/api/demo/insert-products", {
+            method: "POST",
+          });
+          document.getElementById("out2").textContent = result.message;
+          document.getElementById("step2").classList.add("done");
+          document.getElementById("btnStep3").disabled = false;
+        } catch (error) {
+          document.getElementById("out2").innerHTML =
+            `<span class="bad">Demo API unavailable. Set <code>DEMO_MODE=true</code> on the server.</span>`;
+        }
+      });
+
+      document.getElementById("btnStep3").addEventListener("click", async () => {
+        const params = new URLSearchParams({
+          limit: "20",
+          snapshot,
+          cursor: nextCursor,
+        });
+        const result = await fetchJson(`/api/products?${params}`);
+        const page2Ids = result.data.map((p) => p.id);
+        const overlap = page2Ids.filter((id) => page1Ids.includes(id));
+        const demoLeaks = result.data.filter((p) =>
+          p.name.startsWith("DEMO-INSERT-"),
+        );
+
+        document.getElementById("out3").textContent =
+          `Loaded ${result.data.length} more products.`;
+        document.getElementById("step3").classList.add("done");
+
+        const proof = document.getElementById("proof");
+        const proofText = document.getElementById("proofText");
+        proof.hidden = false;
+
+        if (overlap.length === 0 && demoLeaks.length === 0) {
+          proofText.innerHTML =
+            `<span class="good">PASS — 0 duplicates, 0 demo inserts leaked into frozen session.</span>`;
+        } else {
+          proofText.innerHTML =
+            `<span class="bad">FAIL — duplicates: ${overlap.length}, demo leaks: ${demoLeaks.length}</span>`;
+        }
+      });
+    </script>
+  </body>
+</html>

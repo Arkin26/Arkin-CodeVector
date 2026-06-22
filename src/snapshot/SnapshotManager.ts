@@ -54,10 +54,18 @@ export class SnapshotManager {
 
   shutdown(): void {
     clearInterval(this.cleanupTimer);
-    for (const session of this.sessions.values()) {
-      session.client.release();
+    for (const snapshotId of [...this.sessions.keys()]) {
+      this.releaseSession(snapshotId);
     }
-    this.sessions.clear();
+  }
+
+  async shutdownAsync(): Promise<void> {
+    clearInterval(this.cleanupTimer);
+    await Promise.all(
+      [...this.sessions.keys()].map((snapshotId) =>
+        this.releaseSessionAsync(snapshotId),
+      ),
+    );
   }
 
   async listProducts(
@@ -67,6 +75,10 @@ export class SnapshotManager {
       return this.paginateWithinSnapshot(options);
     }
     return this.createSession(options);
+  }
+
+  getSessionCount(): number {
+    return this.sessions.size;
   }
 
   private async createSession(
@@ -162,11 +174,15 @@ export class SnapshotManager {
   }
 
   private releaseSession(snapshotId: string): void {
+    void this.releaseSessionAsync(snapshotId);
+  }
+
+  private async releaseSessionAsync(snapshotId: string): Promise<void> {
     const session = this.sessions.get(snapshotId);
     if (!session) {
       return;
     }
-    session.client.query("ROLLBACK").catch(() => undefined);
+    await session.client.query("ROLLBACK").catch(() => undefined);
     session.client.release();
     this.sessions.delete(snapshotId);
   }

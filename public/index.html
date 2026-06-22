@@ -7,104 +7,464 @@
     <style>
       :root {
         color-scheme: light dark;
-        font-family: system-ui, sans-serif;
+        --bg: #f4f6f8;
+        --card: #ffffff;
+        --text: #1a1a1a;
+        --muted: #5f6b7a;
+        --border: #d8dee6;
+        --accent: #2563eb;
+        --accent-soft: #dbeafe;
+        --good: #15803d;
+        --bad: #b91c1c;
+        --chip-bg: #eef2ff;
+        font-family: "Segoe UI", system-ui, sans-serif;
         line-height: 1.5;
       }
 
-      body {
-        margin: 0 auto;
-        max-width: 960px;
-        padding: 2rem 1rem 4rem;
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #0f1419;
+          --card: #171d24;
+          --text: #edf2f7;
+          --muted: #9aa7b6;
+          --border: #2a3441;
+          --accent: #60a5fa;
+          --accent-soft: #1e3a5f;
+          --good: #4ade80;
+          --bad: #f87171;
+          --chip-bg: #1f2a44;
+        }
       }
 
-      header {
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+      }
+
+      .topbar {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        background: color-mix(in srgb, var(--bg) 92%, transparent);
+        backdrop-filter: blur(8px);
+        border-bottom: 1px solid var(--border);
+      }
+
+      .container {
+        max-width: 1100px;
+        margin: 0 auto;
+        padding: 1.25rem;
+      }
+
+      h1 {
+        margin: 0 0 0.25rem;
+        font-size: 1.75rem;
+      }
+
+      .subtitle {
+        margin: 0 0 1rem;
+        color: var(--muted);
+      }
+
+      .controls {
         display: flex;
         flex-wrap: wrap;
-        gap: 1rem;
+        gap: 0.75rem;
         align-items: end;
-        margin-bottom: 2rem;
+        margin-bottom: 1rem;
       }
 
       label {
         display: grid;
         gap: 0.25rem;
-        font-size: 0.9rem;
+        font-size: 0.85rem;
+        color: var(--muted);
       }
 
       select,
       button {
         font: inherit;
-        padding: 0.5rem 0.75rem;
+        border-radius: 8px;
+        border: 1px solid var(--border);
+        background: var(--card);
+        color: var(--text);
+        padding: 0.55rem 0.85rem;
+      }
+
+      button {
+        cursor: pointer;
+      }
+
+      button.primary {
+        background: var(--accent);
+        border-color: var(--accent);
+        color: white;
+      }
+
+      button.demo {
+        background: var(--accent-soft);
+        border-color: var(--accent);
+        color: var(--text);
+      }
+
+      button:disabled {
+        opacity: 0.55;
+        cursor: not-allowed;
+      }
+
+      .stats {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+        gap: 0.75rem;
+        margin-bottom: 1rem;
+      }
+
+      .stat {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 0.75rem 0.9rem;
+      }
+
+      .stat-label {
+        font-size: 0.75rem;
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+
+      .stat-value {
+        font-size: 1.25rem;
+        font-weight: 600;
+        margin-top: 0.15rem;
+      }
+
+      .stat-value.good {
+        color: var(--good);
+      }
+
+      .stat-value.bad {
+        color: var(--bad);
+      }
+
+      .panel {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 1rem;
+        margin-bottom: 1rem;
+      }
+
+      .panel h2 {
+        margin: 0 0 0.5rem;
+        font-size: 1rem;
+      }
+
+      .panel p {
+        margin: 0 0 0.75rem;
+        color: var(--muted);
+        font-size: 0.92rem;
+      }
+
+      .demo-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+      }
+
+      details {
+        margin-bottom: 1rem;
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 0.75rem 1rem;
+      }
+
+      summary {
+        cursor: pointer;
+        font-weight: 600;
+      }
+
+      details ul {
+        margin: 0.75rem 0 0;
+        padding-left: 1.2rem;
+        color: var(--muted);
+      }
+
+      #status {
+        min-height: 1.25rem;
+        margin-bottom: 0.75rem;
+        color: var(--muted);
+      }
+
+      #status.error {
+        color: var(--bad);
+      }
+
+      #status.success {
+        color: var(--good);
       }
 
       .grid {
         display: grid;
         gap: 1rem;
-        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+        grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
       }
 
       .card {
-        border: 1px solid #8884;
-        border-radius: 8px;
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 12px;
         padding: 1rem;
+        animation: fadeIn 0.25s ease;
       }
 
-      .card h2 {
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+          transform: translateY(4px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      .card h3 {
         margin: 0 0 0.5rem;
         font-size: 1rem;
       }
 
+      .price {
+        font-size: 1.1rem;
+        font-weight: 600;
+        margin: 0.35rem 0;
+      }
+
       .meta {
-        color: #666;
+        color: var(--muted);
         font-size: 0.85rem;
       }
 
-      #status {
-        margin: 1rem 0;
-        min-height: 1.25rem;
+      .chip {
+        display: inline-block;
+        background: var(--chip-bg);
+        border-radius: 999px;
+        padding: 0.15rem 0.55rem;
+        font-size: 0.75rem;
+        margin-bottom: 0.5rem;
       }
 
-      .error {
-        color: #b00020;
+      .skeleton {
+        height: 140px;
+        border-radius: 12px;
+        background: linear-gradient(
+          90deg,
+          var(--card) 0%,
+          color-mix(in srgb, var(--border) 60%, var(--card)) 50%,
+          var(--card) 100%
+        );
+        background-size: 200% 100%;
+        animation: shimmer 1.2s infinite;
+      }
+
+      @keyframes shimmer {
+        0% {
+          background-position: 200% 0;
+        }
+        100% {
+          background-position: -200% 0;
+        }
+      }
+
+      .footer-links {
+        margin-top: 2rem;
+        font-size: 0.9rem;
+      }
+
+      .footer-links a {
+        color: var(--accent);
       }
     </style>
   </head>
   <body>
-    <h1>Product Browse</h1>
-    <p>Browse ~200k products with stable snapshot pagination.</p>
+    <div class="topbar">
+      <div class="container">
+        <h1>Product Browse</h1>
+        <p class="subtitle">
+          Snapshot + keyset pagination over ~200k products. Stable browsing even while data changes.
+        </p>
 
-    <header>
-      <label>
-        Category
-        <select id="category">
-          <option value="">All categories</option>
-        </select>
-      </label>
-      <button id="refresh" type="button">New browse session</button>
-      <button id="loadMore" type="button" disabled>Load more</button>
-    </header>
+        <div class="controls">
+          <label>
+            Category
+            <select id="category">
+              <option value="">All categories</option>
+            </select>
+          </label>
+          <button id="refresh" class="primary" type="button">New browse session</button>
+          <button id="loadMore" type="button" disabled>Load more</button>
+        </div>
 
-    <div id="status"></div>
-    <div id="products" class="grid"></div>
+        <div class="stats">
+          <div class="stat">
+            <div class="stat-label">Products loaded</div>
+            <div id="statLoaded" class="stat-value">0</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Unique IDs</div>
+            <div id="statUnique" class="stat-value">0</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Pages fetched</div>
+            <div id="statPages" class="stat-value">0</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Duplicates</div>
+            <div id="statDuplicates" class="stat-value good">0</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Avg response</div>
+            <div id="statLatency" class="stat-value">—</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Snapshot</div>
+            <div id="statSnapshot" class="stat-value" style="font-size: 0.85rem">—</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="container">
+      <div class="panel" id="demoPanel">
+        <h2>Consistency demo</h2>
+        <p>
+          Start a browse session, simulate 50 writes to the live database, then load more.
+          Duplicates should stay at 0 because your session is frozen at page 1.
+        </p>
+        <div class="demo-actions">
+          <button id="demoInsert" class="demo" type="button">Simulate 50 inserts</button>
+          <button id="demoUpdate" class="demo" type="button">Simulate 50 updates</button>
+        </div>
+      </div>
+
+      <details>
+        <summary>How snapshot pagination works</summary>
+        <ul>
+          <li>Page 1 exports a PostgreSQL snapshot and freezes a point-in-time view.</li>
+          <li>Later pages import that snapshot and walk it with a keyset cursor on (updated_at, id).</li>
+          <li>New inserts/updates after page 1 do not reshuffle your session — no dupes, no misses.</li>
+        </ul>
+      </details>
+
+      <div id="status"></div>
+      <div id="products" class="grid"></div>
+
+      <div class="footer-links">
+        <a href="/demo.html">Guided reviewer demo</a>
+        ·
+        <a href="https://github.com" id="readmeLink">README on GitHub</a>
+      </div>
+    </div>
 
     <script>
       const categorySelect = document.getElementById("category");
       const refreshButton = document.getElementById("refresh");
       const loadMoreButton = document.getElementById("loadMore");
+      const demoInsertButton = document.getElementById("demoInsert");
+      const demoUpdateButton = document.getElementById("demoUpdate");
       const productsEl = document.getElementById("products");
       const statusEl = document.getElementById("status");
+
+      const statLoaded = document.getElementById("statLoaded");
+      const statUnique = document.getElementById("statUnique");
+      const statPages = document.getElementById("statPages");
+      const statDuplicates = document.getElementById("statDuplicates");
+      const statLatency = document.getElementById("statLatency");
+      const statSnapshot = document.getElementById("statSnapshot");
 
       let snapshot = null;
       let nextCursor = null;
       let hasNext = false;
+      let pagesFetched = 0;
+      let seenIds = new Set();
+      let duplicateCount = 0;
+      let latencyTotal = 0;
+      let latencySamples = 0;
 
-      function setStatus(message, isError = false) {
+      const categoryColors = {
+        electronics: "#3b82f6",
+        books: "#8b5cf6",
+        clothing: "#ec4899",
+        home: "#f59e0b",
+        sports: "#10b981",
+        toys: "#ef4444",
+        garden: "#22c55e",
+        automotive: "#64748b",
+        health: "#06b6d4",
+        food: "#f97316",
+      };
+
+      function setStatus(message, type = "") {
         statusEl.textContent = message;
-        statusEl.className = isError ? "error" : "";
+        statusEl.className = type;
+      }
+
+      function updateStats() {
+        statLoaded.textContent = String(seenIds.size + duplicateCount);
+        statUnique.textContent = String(seenIds.size);
+        statPages.textContent = String(pagesFetched);
+        statDuplicates.textContent = String(duplicateCount);
+        statDuplicates.className =
+          "stat-value " + (duplicateCount > 0 ? "bad" : "good");
+        statSnapshot.textContent = snapshot
+          ? snapshot.slice(0, 8) + "…"
+          : "—";
+        statLatency.textContent =
+          latencySamples > 0
+            ? `${Math.round(latencyTotal / latencySamples)}ms`
+            : "—";
+      }
+
+      function resetSession() {
+        snapshot = null;
+        nextCursor = null;
+        hasNext = false;
+        pagesFetched = 0;
+        seenIds = new Set();
+        duplicateCount = 0;
+        latencyTotal = 0;
+        latencySamples = 0;
+        updateStats();
       }
 
       function formatDate(value) {
         return new Date(value).toLocaleString();
+      }
+
+      function trackProducts(products) {
+        for (const product of products) {
+          if (seenIds.has(product.id)) {
+            duplicateCount += 1;
+          } else {
+            seenIds.add(product.id);
+          }
+        }
+        updateStats();
+      }
+
+      function showSkeletons(count = 8) {
+        productsEl.innerHTML = "";
+        for (let i = 0; i < count; i += 1) {
+          const skeleton = document.createElement("div");
+          skeleton.className = "skeleton";
+          productsEl.appendChild(skeleton);
+        }
       }
 
       function renderProducts(products, append) {
@@ -115,18 +475,23 @@
         for (const product of products) {
           const card = document.createElement("article");
           card.className = "card";
+          const chipColor = categoryColors[product.category] || "#64748b";
           card.innerHTML = `
-            <h2>${product.name}</h2>
-            <div class="meta">${product.category}</div>
-            <div>$${Number(product.price).toFixed(2)}</div>
+            <span class="chip" style="background: color-mix(in srgb, ${chipColor} 18%, transparent); color: ${chipColor}">
+              ${product.category}
+            </span>
+            <h3>${product.name}</h3>
+            <div class="price">$${Number(product.price).toFixed(2)}</div>
             <div class="meta">Updated ${formatDate(product.updated_at)}</div>
           `;
           productsEl.appendChild(card);
         }
       }
 
-      async function fetchJson(url) {
-        const response = await fetch(url);
+      async function fetchJson(url, options) {
+        const startedAt = performance.now();
+        const response = await fetch(url, options);
+        const elapsed = Math.round(performance.now() - startedAt);
         const body = await response.json();
         if (!response.ok) {
           const error = new Error(body.message || "Request failed");
@@ -134,6 +499,10 @@
           error.body = body;
           throw error;
         }
+        const headerLatency = response.headers.get("X-Response-Time-Ms");
+        latencyTotal += Number(headerLatency ?? elapsed);
+        latencySamples += 1;
+        updateStats();
         return body;
       }
 
@@ -158,7 +527,11 @@
           params.set("cursor", nextCursor);
         }
 
-        setStatus(append ? "Loading more..." : "Loading...");
+        if (!append) {
+          showSkeletons();
+        }
+
+        setStatus(append ? "Loading more..." : "Loading first page...");
         loadMoreButton.disabled = true;
 
         try {
@@ -166,34 +539,50 @@
           snapshot = result.page_info.snapshot;
           nextCursor = result.page_info.next_cursor;
           hasNext = result.page_info.has_next;
+          pagesFetched += 1;
+          trackProducts(result.data);
           renderProducts(result.data, append);
           setStatus(
             hasNext
-              ? "Showing a snapshot-frozen page. Load more to continue."
+              ? "Snapshot session active. Simulate writes, then load more to verify 0 duplicates."
               : "End of listing for this browse session.",
+            "success",
           );
           loadMoreButton.disabled = !hasNext;
         } catch (error) {
           if (error.status === 410) {
-            snapshot = null;
-            nextCursor = null;
-            hasNext = false;
-            setStatus(`${error.message} Click "New browse session".`, true);
+            resetSession();
+            productsEl.innerHTML = "";
+            setStatus(`${error.message} Click "New browse session".`, "error");
           } else {
-            setStatus(error.message, true);
+            setStatus(error.message, "error");
+          }
+        }
+      }
+
+      async function runDemo(endpoint) {
+        try {
+          const result = await fetchJson(endpoint, { method: "POST" });
+          setStatus(result.message, "success");
+        } catch (error) {
+          if (error.status === 404) {
+            setStatus(
+              "Demo API disabled. Set DEMO_MODE=true on the server to enable simulate buttons.",
+              "error",
+            );
+          } else {
+            setStatus(error.message, "error");
           }
         }
       }
 
       categorySelect.addEventListener("change", () => {
-        snapshot = null;
-        nextCursor = null;
+        resetSession();
         loadProducts();
       });
 
       refreshButton.addEventListener("click", () => {
-        snapshot = null;
-        nextCursor = null;
+        resetSession();
         loadProducts();
       });
 
@@ -201,9 +590,17 @@
         loadProducts({ append: true });
       });
 
+      demoInsertButton.addEventListener("click", () => {
+        runDemo("/api/demo/insert-products");
+      });
+
+      demoUpdateButton.addEventListener("click", () => {
+        runDemo("/api/demo/update-products");
+      });
+
       loadCategories()
         .then(() => loadProducts())
-        .catch((error) => setStatus(error.message, true));
+        .catch((error) => setStatus(error.message, "error"));
     </script>
   </body>
 </html>

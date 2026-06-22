@@ -4,6 +4,42 @@
 
 ---
 
+## 30-second proof for reviewers
+
+**Prerequisite:** Start the server with demo routes enabled:
+```bash
+DEMO_MODE=true npm run dev
+```
+
+**Live demo (UI at http://localhost:3000):**
+1. Open the page — **page 1 loads automatically** (20 products, PostgreSQL snapshot created; stats bar updates)
+2. Click **Simulate 50 inserts** → click **Load more**
+3. Stats bar shows **Duplicates: 0** — frozen snapshot ignored the new rows
+
+**Guided demo:** http://localhost:3000/demo.html — three explicit steps with a PASS/FAIL proof panel (checks 0 ID overlap and 0 `DEMO-INSERT-*` rows leaking into the frozen session)
+
+**Automated proof (no UI needed):**
+```bash
+npm run verify
+# PASS: 60 unique products across 3 pages; 50 inserts ignored mid-session
+```
+Uses `VERIFY-INSERT-*` test rows (cleaned up automatically after the run).
+
+**Why this matters:**
+
+| Scenario | Offset pagination | Cursor only | Our approach (snapshot + keyset) |
+|----------|-------------------|-------------|----------------------------------|
+| 50 inserts mid-browse | Duplicates or skips | Usually OK for inserts | 0 dupes, 0 misses |
+| 50 updates mid-browse | Duplicates or skips | Can miss rows | Frozen view, stable |
+
+**Demo API** (only registered when `DEMO_MODE=true`; otherwise returns **404**):
+- `POST /api/demo/insert-products` — inserts 50 `DEMO-INSERT-*` rows with `updated_at = now()`
+- `POST /api/demo/update-products` — updates 50 random rows to `updated_at = now()`
+
+**Performance:** `GET /api/products` returns `X-Response-Time-Ms` header (typically 5–20ms per page on a seeded local DB).
+
+---
+
 ## 1. What this project is
 
 This is a **full-stack developer take-home assignment** implementation: a small backend that lets users browse **~200,000 products** sorted **newest first**, **filter by category**, and **paginate quickly** — while guaranteeing that if data changes during browsing (e.g. 50 products added or updated), the user **never sees the same product twice** and **never misses a product** within their browse session.
@@ -27,7 +63,9 @@ There is also an **optional simple UI** (`public/index.html`) for manual testing
 | Seed 200k products with id, name, category, price, created_at, updated_at | ✅ | `scripts/seed.sql` via `generate_series` |
 | Fast seed (not row-by-row loop) | ✅ | Single bulk `INSERT … SELECT` (~1–2 seconds) |
 | Seed script committed to repo | ✅ | `scripts/seed.sql` + `scripts/seed.ts` |
-| Bonus: simple UI | ✅ | `public/index.html` (vanilla HTML/JS) |
+| Bonus: simple UI | ✅ | `public/index.html` + `public/demo.html` (vanilla HTML/JS) |
+| Automated consistency proof | ✅ | `npm run verify` |
+| Live demo API | ✅ | `POST /api/demo/*` when `DEMO_MODE=true` |
 
 **Intentionally NOT built:**
 - User authentication
@@ -73,13 +111,17 @@ npm run migrate
 # 4. Insert 200,000 products
 npm run seed
 
-# 5. Start dev server
-npm run dev
+# 5. Start dev server (enable demo buttons for reviewers)
+DEMO_MODE=true npm run dev
 ```
+
+Open http://localhost:3000 — the first 20 products load automatically (no button click needed). Use **Load more** to paginate within the frozen snapshot session.
 
 - **API:** http://localhost:3000/api/products
 - **UI:** http://localhost:3000
+- **Guided demo:** http://localhost:3000/demo.html
 - **Categories:** http://localhost:3000/api/categories
+- **Verify consistency:** `npm run verify`
 
 **Production build:**
 ```bash
@@ -105,6 +147,9 @@ All optional. Defined in `src/config.ts`.
 | `PORT` | `3000` | HTTP server port |
 | `SNAPSHOT_TTL_MS` | `900000` (15 min) | How long a browse session snapshot stays valid |
 | `MAX_SNAPSHOT_SESSIONS` | `100` | Max concurrent snapshot sessions (each holds 1 DB connection) |
+| `DEMO_MODE` | `false` | Set to `true` to enable `POST /api/demo/*` simulate endpoints |
+
+**Pagination limits** (hardcoded in `src/config.ts`, not env vars): default page size `20`, max `100`.
 
 ---
 
@@ -123,10 +168,12 @@ codevector/
 ├── scripts/
 │   ├── migrate.ts             # Runs 001_products.sql against DATABASE_URL
 │   ├── seed.sql               # Bulk INSERT of 200k rows via generate_series
-│   └── seed.ts                # Runs seed.sql; skips if rows already exist
+│   ├── seed.ts                # Runs seed.sql; skips if rows already exist
+│   └── verify-pagination.ts   # Automated proof: 50 inserts mid-session, 0 dupes
 │
 ├── public/
-│   └── index.html             # Optional browse UI (vanilla HTML/CSS/JS)
+│   ├── index.html             # Browse UI: auto-load page 1, stats bar, demo buttons, load more
+│   └── demo.html              # Guided 3-step reviewer demo with PASS/FAIL proof panel
 │
 └── src/
     ├── index.ts               # App entry: Fastify boot, routes, static files, shutdown hooks
@@ -140,21 +187,23 @@ codevector/
     │
     ├── routes/
     │   ├── products.ts        # GET /api/products — HTTP layer only
-    │   └── categories.ts      # GET /api/categories
+    │   ├── categories.ts      # GET /api/categories
+    │   ├── stats.ts           # GET /api/stats
+    │   └── demo.ts            # POST /api/demo/* (when DEMO_MODE=true)
     │
     ├── services/
     │   ├── productService.ts  # SQL query builder, row mapping, category list
     │   └── cursor.ts          # base64url encode/decode for pagination cursors
     │
     └── snapshot/
-        └── SnapshotManager.ts # Core consistency layer: PG snapshot sessions
+        └── SnapshotManager.ts # Core consistency layer: PG snapshot sessions + buildPageInfo()
 ```
 
 ### Layer responsibilities (important for making changes)
 
 | Layer | Files | Responsibility |
 |-------|-------|----------------|
-| **routes/** | `products.ts`, `categories.ts` | Parse HTTP params, return status codes, call services |
+| **routes/** | `products.ts`, `categories.ts`, `stats.ts`, `demo.ts` | Parse HTTP params, return status codes, call services |
 | **services/** | `productService.ts`, `cursor.ts` | Business logic: build SQL, encode cursors |
 | **snapshot/** | `SnapshotManager.ts` | Pagination consistency: export/import PG snapshots |
 | **db/** | `pool.ts` | Database connection management |
@@ -283,14 +332,93 @@ curl "http://localhost:3000/api/categories"
 
 ---
 
+### `GET /api/stats`
+
+```bash
+curl "http://localhost:3000/api/stats"
+```
+
+**Response (200):**
+```json
+{
+  "product_count": 200000,
+  "active_snapshot_sessions": 1,
+  "categories": 10
+}
+```
+
+---
+
+### `POST /api/demo/insert-products` (requires `DEMO_MODE=true`)
+
+Inserts 50 products with `updated_at = now()` to simulate concurrent writes.
+
+```bash
+curl -X POST "http://localhost:3000/api/demo/insert-products"
+```
+
+### `POST /api/demo/update-products` (requires `DEMO_MODE=true`)
+
+Updates 50 random products to `updated_at = now()`.
+
+```bash
+curl -X POST "http://localhost:3000/api/demo/update-products"
+```
+
+---
+
+### Response headers
+
+`GET /api/products` includes `X-Response-Time-Ms` with server-side query latency in milliseconds.
+
+---
+
 ### Static UI
 
-`GET /` serves `public/index.html` — a single-page product browser with:
-- Category dropdown (populated from `/api/categories`)
-- Product card grid (name, category, price, updated_at)
-- **New browse session** button (resets snapshot, fetches page 1)
-- **Load more** button (appends next page using snapshot + cursor)
-- Handles 410 expired snapshot with user message
+#### `GET /` → `public/index.html` (main browse UI)
+
+Vanilla HTML/CSS/JS — no build step. On page load:
+
+1. `loadCategories()` fetches `/api/categories` and fills the dropdown
+2. `loadProducts()` fetches `/api/products?limit=20` (page 1, new snapshot session)
+3. Skeleton placeholders show while the first page loads
+
+**Controls:**
+
+| Control | Behavior |
+|---------|----------|
+| Category dropdown | Changing category calls `resetSession()` and loads page 1 for that filter |
+| **New browse session** | Discards snapshot/cursor/stats and loads a fresh page 1 |
+| **Load more** | Appends page 2+ using stored `snapshot` + `next_cursor`; disabled when `has_next` is false |
+| **Simulate 50 inserts / updates** | `POST` to `/api/demo/*`; shows a friendly error if `DEMO_MODE` is not enabled |
+
+**Stats bar (client-side proof):**
+
+| Stat | Source |
+|------|--------|
+| Products loaded | Unique IDs + duplicate count |
+| Unique IDs | `Set` of product IDs seen this session |
+| Pages fetched | API calls made |
+| Duplicates | IDs seen more than once (should stay **0** during consistency demo) |
+| Avg response | Mean of `X-Response-Time-Ms` headers (falls back to `performance.now()` delta) |
+| Snapshot | Truncated snapshot ID from `page_info.snapshot` |
+
+**Session state held in memory (browser):** `snapshot`, `nextCursor`, `hasNext`, `seenIds`, `duplicateCount`, latency samples.
+
+**Error handling:**
+- `410` snapshot expired/not found → clears grid, prompts user to click **New browse session**
+- Demo `404` → *"Demo API disabled. Set DEMO_MODE=true on the server…"*
+
+**Product cards:** category color chips, name, price, localized `updated_at`.
+
+#### `GET /demo.html` → guided reviewer demo
+
+Three manual steps (Load page 1 → Simulate 50 inserts → Load page 2). Proof panel:
+
+- **PASS** — 0 duplicate IDs between page 1 and page 2, and 0 `DEMO-INSERT-*` names in page 2
+- **FAIL** — reports overlap count and demo-leak count
+
+Link back to main browse UI at `/`.
 
 ---
 
@@ -381,8 +509,18 @@ class SnapshotManager {
     hasNext: boolean;
   }>;
 
-  shutdown(): void;  // Called on server shutdown; releases all held connections
+  getSessionCount(): number;
+
+  shutdown(): void;           // Sync cleanup on server close
+  shutdownAsync(): Promise<void>;  // Awaitable cleanup (used by verify script)
 }
+
+// Also exported from this file:
+function buildPageInfo(
+  snapshotId: string,
+  products: Product[],
+  hasNext: boolean,
+): { snapshot: string; next_cursor: string | null; has_next: boolean };
 ```
 
 Custom errors:
@@ -409,11 +547,11 @@ Builds parameterized SQL dynamically based on:
 ### `registerProductRoutes()` (`src/routes/products.ts`)
 
 HTTP handler for `GET /api/products`:
-1. Parse and validate query params
+1. Parse and validate query params (`limit` clamped to 1–100)
 2. Decode cursor if present
 3. Call `snapshotManager.listProducts()`
 4. Map errors to HTTP status codes
-5. Return `{ data, page_info }`
+5. Build `page_info` via `buildPageInfo()` and return `{ data, page_info }`
 
 ---
 
@@ -449,6 +587,9 @@ Client                    Fastify (routes/products.ts)       SnapshotManager    
 | `start` | `node dist/index.js` | Run compiled production build |
 | `migrate` | `tsx scripts/migrate.ts` | Apply `migrations/001_products.sql` |
 | `seed` | `tsx scripts/seed.ts` | Bulk insert 200k products |
+| `verify` | `tsx scripts/verify-pagination.ts` | 3-page snapshot walk, 50 mid-session inserts, asserts 0 dupes/leaks/ordering violations; cleans up `VERIFY-INSERT-*` rows |
+
+**Recommended reviewer startup:** `docker compose up -d && npm install && npm run migrate && npm run seed && DEMO_MODE=true npm run dev`
 
 ---
 
@@ -492,10 +633,14 @@ Suggested integration test (`src/snapshot/SnapshotManager.test.ts`):
 | `docker.sock: no such file` | Docker Desktop not running | Open Docker Desktop, wait until running |
 | `port 5432: address already in use` | Local Postgres on 5432 | Project uses port **5433** — ensure `docker-compose.yml` has `5433:5432` |
 | `password authentication failed for user "products"` | App connecting to wrong Postgres | Check `DATABASE_URL` points to port **5433** with `products:products` |
-| `snapshot_expired` (410) | Browse session > 15 min old | Click "New browse session" or omit snapshot param |
+| `snapshot_expired` (410) | Browse session > 15 min old | Click **New browse session** or omit `snapshot` param |
 | `snapshot_capacity` (503) | >100 concurrent browse sessions | Wait for TTL cleanup or restart server |
-| Empty product list | DB not seeded | Run `npm run migrate && npm run seed` |
-| UI loads but no products | API error | Check terminal for DB connection errors |
+| Empty API response / verify fails on page 1 | DB not seeded | Run `npm run migrate && npm run seed` |
+| UI shows 0 products, buttons do nothing, stats stay at 0 | Inline `<script>` failed to parse (check browser DevTools → Console) | Fix JS syntax in `public/index.html`; hard-refresh the page |
+| UI shows 0 products but API works (`curl /api/products` returns data) | Same as above — page JS never ran | Open DevTools Console; confirm `loadProducts` is defined after refresh |
+| **Simulate 50 inserts** does nothing / 404 in server log | `DEMO_MODE` not enabled | Restart with `DEMO_MODE=true npm run dev` |
+| Stats show duplicates > 0 after demo | Expected only if snapshot pagination is broken | Re-run `npm run verify`; compare with `demo.html` PASS panel |
+| `npm run verify` FAIL | Snapshot/keyset regression or empty DB | Read script output; ensure 200k rows seeded |
 
 ---
 
@@ -601,4 +746,45 @@ If explaining this project:
 - Table `products` with 200,000 rows and 2 indexes
 - Fastify server on `localhost:3000` serving API + static UI
 - Browse sessions held in memory with 15-minute TTL, max 100 concurrent
-# Arkin-CodeVector
+- `DEMO_MODE=true` → demo routes active; UI simulate buttons and `demo.html` step 2 work
+- Main UI auto-loads page 1 on open; **Load more** enabled when `has_next` is true
+
+---
+
+## 20. Proof checklist (matches current code)
+
+Use this to confirm the repo is demo-ready end-to-end:
+
+```bash
+# 1. Infrastructure + data
+docker compose up -d
+npm install
+npm run migrate
+npm run seed
+
+# 2. API smoke test
+curl -s "http://localhost:3000/api/products?limit=5" | head -c 200
+# → JSON with data[] and page_info.snapshot
+
+# 3. Automated consistency proof
+npm run verify
+# → PASS: 60 unique products across 3 pages; 50 inserts ignored mid-session
+
+# 4. UI proof (separate terminal)
+DEMO_MODE=true npm run dev
+# Open http://localhost:3000 — 20 products appear without clicking anything
+# Click Simulate 50 inserts → Load more → Duplicates stays 0
+
+# 5. Guided UI proof
+# Open http://localhost:3000/demo.html — complete 3 steps → PASS panel
+```
+
+**What each proof layer validates:**
+
+| Layer | File / command | Proves |
+|-------|----------------|--------|
+| API | `curl /api/products` | DB seeded, snapshot export works |
+| Automated | `npm run verify` | 3-page session, 50 inserts mid-flight, 0 dupes/leaks/order violations |
+| Main UI | `public/index.html` | Auto-load, stats bar, load-more pagination, duplicate counter |
+| Guided UI | `public/demo.html` | Reviewer-friendly PASS/FAIL with `DEMO-INSERT-*` leak detection |
+| Demo writes | `POST /api/demo/*` | Simulates concurrent production writes (`DEMO_MODE=true` required) |

@@ -7,4 +7,5 @@ export const config = {
   maxSnapshotSessions: Number(process.env.MAX_SNAPSHOT_SESSIONS ?? 100),
   defaultPageLimit: 20,
   maxPageLimit: 100,
+  demoMode: process.env.DEMO_MODE === "true",
 };

@@ -49,12 +49,15 @@ export function registerProductRoutes(
       }
 
       try {
+        const startedAt = performance.now();
         const result = await snapshotManager.listProducts({
           limit,
           category,
           snapshot,
           cursor,
         });
+        const elapsedMs = Math.round(performance.now() - startedAt);
+        reply.header("X-Response-Time-Ms", String(elapsedMs));
 
         return {
           data: result.products,

@@ -7,6 +7,8 @@ import { pool } from "./db/pool.js";
 import { SnapshotManager } from "./snapshot/SnapshotManager.js";
 import { registerProductRoutes } from "./routes/products.js";
 import { registerCategoryRoutes } from "./routes/categories.js";
+import { registerStatsRoutes } from "./routes/stats.js";
+import { registerDemoRoutes } from "./routes/demo.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -16,6 +18,12 @@ async function main() {
 
   registerProductRoutes(app, snapshotManager);
   registerCategoryRoutes(app);
+  registerStatsRoutes(app, snapshotManager);
+
+  if (config.demoMode) {
+    registerDemoRoutes(app);
+    app.log.info("Demo routes enabled (DEMO_MODE=true)");
+  }
 
   await app.register(fastifyStatic, {
     root: path.join(__dirname, "..", "public"),
@@ -23,7 +31,7 @@ async function main() {
   });
 
   app.addHook("onClose", async () => {
-    snapshotManager.shutdown();
+    await snapshotManager.shutdownAsync();
     await pool.end();
   });
 
